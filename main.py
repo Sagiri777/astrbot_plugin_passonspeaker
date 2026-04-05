@@ -18,12 +18,6 @@ class PendingForward:
     preview_text: str
 
 
-@register(
-    "astrbot_plugin_passonspeaker",
-    "guozimier",
-    "Forward admin private messages to a target sid using the bot account.",
-    "v1.0.0",
-)
 class PassOnSpeakerPlugin(Star):
     def __init__(self, context: Context) -> None:
         super().__init__(context)

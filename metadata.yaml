@@ -2,5 +2,5 @@ name: astrbot_plugin_passonspeaker
 display_name: PassOnSpeaker
 desc: Let an AstrBot admin forward private-chat messages to a target sid as the bot.
 version: v1.0.0
-author: guozimier
-repo: https://github.com/guozimier/astrbot_plugin_passonspeaker
+author: Sagiri777
+repo: https://github.com/Sagiri777/astrbot_plugin_passonspeaker

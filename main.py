@@ -8,7 +8,6 @@ from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.message_components import Reply
 from astrbot.api.star import Context, Star
 from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.star.filter.command import GreedyStr
 
 
 class PassOnSpeakerPlugin(Star):
@@ -52,6 +51,18 @@ class PassOnSpeakerPlugin(Star):
         targets = cls._validate_sid_list(match.group(1))
         content = text[: match.start()].rstrip()
         return content, targets
+
+    @staticmethod
+    def _extract_subcommand_text(
+        event: AstrMessageEvent,
+        subcommand: str,
+    ) -> str:
+        message = re.sub(r"\s+", " ", event.get_message_str().strip())
+        pattern = rf"^passon\s+{re.escape(subcommand)}(?:\s+(.*))?$"
+        match = re.match(pattern, message)
+        if not match:
+            return ""
+        return (match.group(1) or "").strip()
 
     @staticmethod
     def _format_message_type_label(message_type: str) -> str:
@@ -194,16 +205,12 @@ class PassOnSpeakerPlugin(Star):
         """私聊转发辅助指令组"""
 
     @passon.command("bind")
-    async def passon_bind(
-        self,
-        event: AstrMessageEvent,
-        raw_sid: GreedyStr = "",
-    ):
+    async def passon_bind(self, event: AstrMessageEvent):
         if not self._is_supported_private_admin(event):
             yield event.plain_result("仅 AstrBot 管理员可在私聊中使用 /passon。")
             return
 
-        raw_sid = raw_sid.strip()
+        raw_sid = self._extract_subcommand_text(event, "bind")
         if not raw_sid:
             yield event.plain_result("用法：/passon bind <umo1 umo2...>")
             return
@@ -249,16 +256,12 @@ class PassOnSpeakerPlugin(Star):
         yield event.plain_result("当前没有可解除的转发绑定。")
 
     @passon.command("send")
-    async def passon_send(
-        self,
-        event: AstrMessageEvent,
-        send_args: GreedyStr = "",
-    ):
+    async def passon_send(self, event: AstrMessageEvent):
         if not self._is_supported_private_admin(event):
             yield event.plain_result("仅 AstrBot 管理员可在私聊中使用 /passon。")
             return
 
-        send_args = send_args.strip()
+        send_args = self._extract_subcommand_text(event, "send")
         try:
             text, target_sids = self._extract_targets_from_text(send_args)
         except Exception as exc:

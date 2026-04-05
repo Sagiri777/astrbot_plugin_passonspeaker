@@ -44,12 +44,13 @@ class PassOnSpeakerPlugin(Star):
         cls,
         text: str,
     ) -> tuple[str, list[str]]:
-        match = re.search(r"\s--(?:sid|umo)\s+(.+)$", text.strip())
+        stripped = text.strip()
+        match = re.search(r"(?:^|\s)--(?:sid|umo)\s+(.+)$", stripped)
         if not match:
-            return text.strip(), []
+            return stripped, []
 
         targets = cls._validate_sid_list(match.group(1))
-        content = text[: match.start()].rstrip()
+        content = stripped[: match.start()].rstrip()
         return content, targets
 
     @staticmethod

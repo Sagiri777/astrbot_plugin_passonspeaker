@@ -1,14 +1,23 @@
-# astrbot-plugin-helloworld
+# astrbot-plugin-passonspeaker
 
-AstrBot 插件模板 / A template plugin for AstrBot plugin feature
+私聊转发辅助插件。仅 AstrBot 管理员可在私聊中使用。
 
-> [!NOTE]
-> This repo is just a template of [AstrBot](https://github.com/AstrBotDevs/AstrBot) Plugin.
-> 
-> [AstrBot](https://github.com/AstrBotDevs/AstrBot) is an agentic assistant for both personal and group conversations. It can be deployed across dozens of mainstream instant messaging platforms, including QQ, Telegram, Feishu, DingTalk, Slack, LINE, Discord, Matrix, etc. In addition, it provides a reliable and extensible conversational AI infrastructure for individuals, developers, and teams. Whether you need a personal AI companion, an intelligent customer support agent, an automation assistant, or an enterprise knowledge base, AstrBot enables you to quickly build AI applications directly within your existing messaging workflows.
+## Commands
 
-# Supports
+- `/passon bind <umo1 umo2...>`
+  - 绑定当前私聊会话的默认转发目标。
+- `/passon status`
+  - 查看当前默认目标。
+- `/passon unbind`
+  - 解除当前默认目标。
+- `/passon send <message> --umo <umo1 umo2...>`
+  - 将文本转发到指定目标。
+- `/passon send <message>`
+  - 当当前私聊已绑定默认目标时，转发文本到默认目标。
+- `/passon send --umo <umo1 umo2...>` 并引用一条消息
+  - 当命令正文为空且这条命令引用了一条消息时，转发被引用的那条消息。
 
-- [AstrBot Repo](https://github.com/AstrBotDevs/AstrBot)
-- [AstrBot Plugin Development Docs (Chinese)](https://docs.astrbot.app/dev/star/plugin-new.html)
-- [AstrBot Plugin Development Docs (English)](https://docs.astrbot.app/en/dev/star/plugin-new.html)
+## Notes
+
+- `--sid` 仍然兼容，可与 `--umo` 混用。
+- 为避免与其他私聊插件冲突，插件不再拦截普通私聊消息，所有转发都需要显式使用 `/passon` 命令。

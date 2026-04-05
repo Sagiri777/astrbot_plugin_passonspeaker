@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
 from astrbot.api import logger
@@ -32,14 +33,86 @@ class PassOnSpeakerPlugin(Star):
         r"(?<![\w@＠])[@＠](?P<target>all|\d{5,20})(?=$|[^\w])",
         re.IGNORECASE,
     )
+    _BINDINGS_FILE_NAME = "passon_bindings.json"
 
     def __init__(self, context: Context) -> None:
         super().__init__(context)
         self._bound_targets: dict[str, list[str]] = {}
+        self._bindings_file = Path(__file__).with_name(self._BINDINGS_FILE_NAME)
+        self._load_bound_targets()
 
     @staticmethod
     def _is_supported_private_admin(event: AstrMessageEvent) -> bool:
         return event.is_private_chat() and event.is_admin()
+
+    @classmethod
+    def _get_admin_binding_key(cls, event: AstrMessageEvent) -> str:
+        sender_id = str(event.get_sender_id()).strip()
+        if not sender_id:
+            return event.unified_msg_origin
+
+        try:
+            source_session = MessageSession.from_str(event.unified_msg_origin)
+            platform_id = str(source_session.platform_id).strip()
+        except Exception:
+            platform_id = ""
+
+        if platform_id:
+            return f"{platform_id}:{sender_id}"
+        return sender_id
+
+    def _load_bound_targets(self) -> None:
+        if not self._bindings_file.exists():
+            return
+
+        try:
+            raw_data = json.loads(self._bindings_file.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("passonspeaker failed to load bindings: %s", exc)
+            return
+
+        if not isinstance(raw_data, dict):
+            logger.warning("passonspeaker bindings file is not a JSON object")
+            return
+
+        loaded_bindings: dict[str, list[str]] = {}
+        for raw_key, raw_sids in raw_data.items():
+            key = str(raw_key).strip()
+            if not key or not isinstance(raw_sids, list):
+                continue
+
+            valid_sids: list[str] = []
+            for raw_sid in raw_sids:
+                try:
+                    sid = self._validate_sid(str(raw_sid))
+                except Exception:
+                    continue
+                if sid not in valid_sids:
+                    valid_sids.append(sid)
+
+            if valid_sids:
+                loaded_bindings[key] = valid_sids
+
+        self._bound_targets = loaded_bindings
+
+    def _save_bound_targets(self) -> None:
+        payload = json.dumps(
+            self._bound_targets,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        temp_file = self._bindings_file.with_suffix(".json.tmp")
+        try:
+            temp_file.write_text(payload, encoding="utf-8")
+            temp_file.replace(self._bindings_file)
+        except Exception as exc:
+            logger.warning("passonspeaker failed to save bindings: %s", exc)
+            try:
+                if temp_file.exists():
+                    temp_file.unlink()
+            except Exception:
+                pass
 
     @staticmethod
     def _validate_sid(raw_sid: str) -> str:
@@ -478,7 +551,9 @@ class PassOnSpeakerPlugin(Star):
             yield event.plain_result("请至少提供一个合法的 umo。")
             return
 
-        self._bound_targets[event.unified_msg_origin] = target_sids
+        binding_key = self._get_admin_binding_key(event)
+        self._bound_targets[binding_key] = target_sids
+        self._save_bound_targets()
         descriptions = await self._describe_sid_list(target_sids)
         yield event.plain_result(
             "绑定成功。后续默认可转发到：\n" + "\n".join(descriptions)
@@ -490,7 +565,8 @@ class PassOnSpeakerPlugin(Star):
             yield event.plain_result("仅 AstrBot 管理员可在私聊中使用 /passon。")
             return
 
-        target_sids = self._bound_targets.get(event.unified_msg_origin, [])
+        binding_key = self._get_admin_binding_key(event)
+        target_sids = self._bound_targets.get(binding_key, [])
         if target_sids:
             descriptions = await self._describe_sid_list(target_sids)
             yield event.plain_result("当前已绑定默认目标：\n" + "\n".join(descriptions))
@@ -504,7 +580,9 @@ class PassOnSpeakerPlugin(Star):
             yield event.plain_result("仅 AstrBot 管理员可在私聊中使用 /passon。")
             return
 
-        if self._bound_targets.pop(event.unified_msg_origin, None):
+        binding_key = self._get_admin_binding_key(event)
+        if self._bound_targets.pop(binding_key, None):
+            self._save_bound_targets()
             yield event.plain_result("已解除当前私聊会话的转发绑定。")
             return
 
@@ -524,7 +602,8 @@ class PassOnSpeakerPlugin(Star):
             return
 
         if not target_sids:
-            target_sids = self._bound_targets.get(event.unified_msg_origin, [])
+            binding_key = self._get_admin_binding_key(event)
+            target_sids = self._bound_targets.get(binding_key, [])
 
         if not target_sids:
             yield event.plain_result(

@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+passon_bindings.json
 *.py[codz]
 *$py.class
 

@@ -8,6 +8,7 @@ from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.message_components import Reply
 from astrbot.api.star import Context, Star
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.star.filter.command import GreedyStr
 
 
 class PassOnSpeakerPlugin(Star):
@@ -188,73 +189,76 @@ class PassOnSpeakerPlugin(Star):
 
         return MessageChain(chain=deepcopy(reply_component.chain)), None
 
-    @filter.command("passon")
-    async def passon_command(
+    @filter.command_group("passon")
+    def passon(self) -> None:
+        """私聊转发辅助指令组"""
+
+    @passon.command("bind")
+    async def passon_bind(
         self,
         event: AstrMessageEvent,
-        args_str: str = "",
+        raw_sid: GreedyStr = "",
     ):
         if not self._is_supported_private_admin(event):
             yield event.plain_result("仅 AstrBot 管理员可在私聊中使用 /passon。")
             return
 
-        args = args_str.strip()
-        if not args:
-            yield event.plain_result(
-                "用法：/passon bind <umo...> 绑定默认目标；"
-                "/passon unbind 解除绑定；"
-                "/passon status 查看当前绑定；"
-                "/passon send <文本> --umo <umo1 umo2...> 临时转发。",
-            )
+        raw_sid = raw_sid.strip()
+        if not raw_sid:
+            yield event.plain_result("用法：/passon bind <umo1 umo2...>")
             return
 
-        if args == "status":
-            target_sids = self._bound_targets.get(event.unified_msg_origin, [])
-            if target_sids:
-                descriptions = await self._describe_sid_list(target_sids)
-                yield event.plain_result(
-                    "当前已绑定默认目标：\n" + "\n".join(descriptions)
-                )
-            else:
-                yield event.plain_result("当前未绑定默认目标。")
+        try:
+            target_sids = self._validate_sid_list(raw_sid)
+        except Exception as exc:
+            yield event.plain_result(f"umo 格式不合法：{exc}")
             return
 
-        if args == "unbind":
-            if self._bound_targets.pop(event.unified_msg_origin, None):
-                yield event.plain_result("已解除当前私聊会话的转发绑定。")
-            else:
-                yield event.plain_result("当前没有可解除的转发绑定。")
+        if not target_sids:
+            yield event.plain_result("请至少提供一个合法的 umo。")
             return
 
-        if args.startswith("bind "):
-            raw_sid = args[5:].strip()
-            if not raw_sid:
-                yield event.plain_result("用法：/passon bind <umo1 umo2...>")
-                return
+        self._bound_targets[event.unified_msg_origin] = target_sids
+        descriptions = await self._describe_sid_list(target_sids)
+        yield event.plain_result("绑定成功。后续默认可转发到：\n" + "\n".join(descriptions))
 
-            try:
-                target_sids = self._validate_sid_list(raw_sid)
-            except Exception as exc:
-                yield event.plain_result(f"umo 格式不合法：{exc}")
-                return
+    @passon.command("status")
+    async def passon_status(self, event: AstrMessageEvent):
+        if not self._is_supported_private_admin(event):
+            yield event.plain_result("仅 AstrBot 管理员可在私聊中使用 /passon。")
+            return
 
-            if not target_sids:
-                yield event.plain_result("请至少提供一个合法的 umo。")
-                return
-
-            self._bound_targets[event.unified_msg_origin] = target_sids
+        target_sids = self._bound_targets.get(event.unified_msg_origin, [])
+        if target_sids:
             descriptions = await self._describe_sid_list(target_sids)
-            yield event.plain_result(
-                "绑定成功。后续默认可转发到：\n" + "\n".join(descriptions)
-            )
+            yield event.plain_result("当前已绑定默认目标：\n" + "\n".join(descriptions))
             return
 
-        send_args = args
-        if args == "send":
-            send_args = ""
-        elif args.startswith("send "):
-            send_args = args[5:].strip()
+        yield event.plain_result("当前未绑定默认目标。")
 
+    @passon.command("unbind")
+    async def passon_unbind(self, event: AstrMessageEvent):
+        if not self._is_supported_private_admin(event):
+            yield event.plain_result("仅 AstrBot 管理员可在私聊中使用 /passon。")
+            return
+
+        if self._bound_targets.pop(event.unified_msg_origin, None):
+            yield event.plain_result("已解除当前私聊会话的转发绑定。")
+            return
+
+        yield event.plain_result("当前没有可解除的转发绑定。")
+
+    @passon.command("send")
+    async def passon_send(
+        self,
+        event: AstrMessageEvent,
+        send_args: GreedyStr = "",
+    ):
+        if not self._is_supported_private_admin(event):
+            yield event.plain_result("仅 AstrBot 管理员可在私聊中使用 /passon。")
+            return
+
+        send_args = send_args.strip()
         try:
             text, target_sids = self._extract_targets_from_text(send_args)
         except Exception as exc:
